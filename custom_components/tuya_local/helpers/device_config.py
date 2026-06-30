@@ -11,7 +11,7 @@ from numbers import Number
 from os import scandir
 from os.path import dirname, exists, join, splitext
 
-from homeassistant.util import slugify
+from homeassistant.util import dt as dt_util, slugify
 from homeassistant.util.yaml import load_yaml
 
 import custom_components.tuya_local.devices as config_dir
@@ -419,6 +419,7 @@ class TuyaDpsConfig:
             "utf16b64": str,
             "hex": str,
             "unixtime": int,
+            "packeddate": str,
         }
         return types.get(t)
 
@@ -862,6 +863,10 @@ class TuyaDpsConfig:
             except Exception:
                 _LOGGER.warning("Invalid timestamp %d", result)
 
+        if self.rawtype == "packeddate" and isinstance(result, str):
+            result = self._decode_packed_date(result)
+            replaced = True
+
         if replaced:
             _LOGGER.debug(
                 "%s: Mapped dps %s value from %s to %s",
@@ -872,6 +877,34 @@ class TuyaDpsConfig:
             )
 
         return result
+
+    def _decode_packed_date(self, value):
+        """Decode a base64 packed [Y-2000, M, D, h, m] value to a datetime.
+
+        Some Tuya devices (eg irrigation timers) transmit a scheduled time
+        as 5 raw bytes packed as ``[year - 2000, month, day, hour, minute]``,
+        base64 encoded (eg ``"GgcBBgA="`` -> 2026-07-01 06:00). Returns a
+        tz-aware datetime, or None when there is no schedule (all-zero
+        sentinel) or the data is invalid.
+        """
+        try:
+            raw = b64decode(value)
+        except (ValueError, TypeError):
+            _LOGGER.warning("Invalid base64 packeddate '%s'", value)
+            return None
+        if len(raw) < 5:
+            return None
+        year, month, day, hour, minute = raw[0], raw[1], raw[2], raw[3], raw[4]
+        # All-zero is a "no run scheduled" sentinel on some firmwares.
+        if year == 0 and month == 0 and day == 0:
+            return None
+        try:
+            # The device reports its schedule in local time; as_utc assumes
+            # a naive datetime is in the configured DEFAULT_TIME_ZONE.
+            return dt_util.as_utc(datetime(2000 + year, month, day, hour, minute))
+        except ValueError:
+            _LOGGER.warning("Invalid packeddate components in '%s'", value)
+            return None
 
     def _find_map_for_value(self, value, device):
         default = None
