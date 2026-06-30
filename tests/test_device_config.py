@@ -1,9 +1,12 @@
 """Test the config parser"""
 
+from datetime import datetime
+
 import pytest
 import voluptuous as vol
 from fuzzywuzzy import fuzz
 from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.util import dt as dt_util
 
 from custom_components.tuya_local.helpers.config import get_device_id
 from custom_components.tuya_local.helpers.device_config import (
@@ -91,6 +94,7 @@ DP_SCHEMA = vol.Schema(
                 "base64",
                 "bitfield",
                 "unixtime",
+                "packeddate",
                 "json",
                 "utf16b64",
             ]
@@ -682,6 +686,41 @@ def test_decoding_base64(mocker):
     mock_device.get_property.return_value = "VGVzdA=="
     cfg = TuyaDpsConfig(mock_entity, mock_config)
     assert cfg.decoded_value(mock_device) == bytes("Test", "utf-8")
+
+
+def test_decoding_packeddate(mocker):
+    """Test that get_value decodes a base64 packed date to a datetime."""
+    mock_entity = mocker.MagicMock()
+    mock_config = {"id": "1", "name": "sensor", "type": "packeddate"}
+    mock_device = mocker.MagicMock()
+    # bytes [26, 7, 1, 6, 0] -> 2026-07-01 06:00 local time
+    mock_device.get_property.return_value = "GgcBBgA="
+    cfg = TuyaDpsConfig(mock_entity, mock_config)
+    assert cfg.get_value(mock_device) == dt_util.as_utc(datetime(2026, 7, 1, 6, 0))
+
+
+def test_decoding_packeddate_sentinel(mocker):
+    """Test that the all-zero "no schedule" sentinel decodes to None."""
+    mock_entity = mocker.MagicMock()
+    mock_config = {"id": "1", "name": "sensor", "type": "packeddate"}
+    mock_device = mocker.MagicMock()
+    mock_device.get_property.return_value = "AAAAAAA="
+    cfg = TuyaDpsConfig(mock_entity, mock_config)
+    assert cfg.get_value(mock_device) is None
+
+
+def test_decoding_packeddate_invalid(mocker):
+    """Test that invalid packed dates decode to None rather than raising."""
+    mock_entity = mocker.MagicMock()
+    mock_config = {"id": "1", "name": "sensor", "type": "packeddate"}
+    mock_device = mocker.MagicMock()
+    cfg = TuyaDpsConfig(mock_entity, mock_config)
+    # Too few bytes
+    mock_device.get_property.return_value = "AAA="
+    assert cfg.get_value(mock_device) is None
+    # Bogus month (13) -> ValueError caught internally
+    mock_device.get_property.return_value = "Gg0BBgA="
+    assert cfg.get_value(mock_device) is None
 
 
 def test_decoding_hex(mocker):

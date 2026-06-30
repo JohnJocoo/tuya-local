@@ -477,3 +477,15 @@ entities:
         name: year
         type: base64
         mask: "FF00000000"
+  - entity: sensor
+    # Human-readable decode of DP 128 (see "Next watering encoded").
+    # The device packs the next scheduled run as 5 base64 bytes
+    # [year-2000, month, day, hour, minute] in local time.
+    name: Next watering
+    class: timestamp
+    icon: "mdi:water-clock"
+    dps:
+      - id: 128
+        optional: true
+        name: sensor
+        type: packeddate

@@ -159,6 +159,7 @@ The type of data returned by the Tuya API. Can be one of the following:
  - **hex** is a special case of string, where binary data is hex encoded. Platforms that use this type will need special handling to make sense of the data.
  - **json** is a special case of string, where multiple data points are encoded in json format in the string. Platforms that use this type will need special handling to make sense of the data.
  - **utf16b64** is a special case of string, where a UTF-16 string is base64 encoded. This will be decoded into a UTF-8 string so it is readable in Home Assistant.
+ - **packeddate** is a special case of string, where the device packs a date and time into 5 base64 encoded bytes as `[year - 2000, month, day, hour, minute]` (local time). This is converted to a tz-aware datetime for Home Assistant, so it can be used directly by a `timestamp` sensor. An all-zero value is treated as "no value" (None).
  - **float** can contain floating point numbers. No known devices use this, but it is supported if needed.
 
 ### `name`
