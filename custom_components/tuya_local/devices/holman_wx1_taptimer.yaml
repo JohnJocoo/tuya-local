@@ -481,7 +481,7 @@ entities:
     # [year-2000, month, day, hour, minute] in local time.
     name: Next watering
     class: timestamp
-    icon: "mdi:water-clock"
+    icon: "mdi:timer"
     dps:
       - id: 128
         optional: true
