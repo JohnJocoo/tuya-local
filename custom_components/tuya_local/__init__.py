@@ -82,9 +82,27 @@ def cleanup_failed_device(hass: HomeAssistant, device_id: str):
         return
 
     api = stale.get("tuyadevice")
-    if api:
-        api.set_socketPersistent(False)
-        if api.parent:
+    if not api:
+        return
+
+    api.set_socketPersistent(False)
+    if api.parent:
+        # The parent tinytuya.Device is not private to this entry. device.py
+        # keys it on the bare dev_id and hands the same object (and lock) to
+        # every sub-device behind the gateway, so closing it here on behalf of
+        # one failing sub-device drops the socket its siblings are actively
+        # using. A 3.4 gateway accepts a single session, so the siblings then
+        # fail their next refresh, get cleaned up in turn, and the pair never
+        # recovers without an HA restart.
+        #
+        # Only close the parent once nothing else is holding it. domain_data
+        # keys sub-devices as dev_id/cid; the bare dev_id key is the sharing
+        # point itself rather than an entry, so it is not a sibling.
+        parent_id = device_id.split("/")[0]
+        if not any(
+            key not in (parent_id, device_id) and key.split("/")[0] == parent_id
+            for key in domain_data
+        ):
             api.parent.set_socketPersistent(False)
 
 
