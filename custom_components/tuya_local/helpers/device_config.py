@@ -890,7 +890,7 @@ class TuyaDpsConfig:
         """
         try:
             raw = b64decode(value)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             _LOGGER.warning("Invalid base64 packeddate '%s'", value)
             return None
         if len(raw) < 5:
