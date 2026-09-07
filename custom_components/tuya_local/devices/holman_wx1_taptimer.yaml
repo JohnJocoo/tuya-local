@@ -450,6 +450,12 @@ entities:
         optional: true
         name: sensor
         type: base64
+        # The gateway does not volunteer dp 128 in its status response, so the
+        # value is never cached and both dp 128 entities read unknown. force
+        # adds it to _force_dps, making the receive loop issue an explicit
+        # UPDATEDPS request for it. Collected per dp id, so this also covers
+        # the "Next watering" packeddate entity below.
+        force: true
       - id: 128
         optional: true
         name: minute
