@@ -135,12 +135,23 @@ entities:
     name: Start A encoded
     # this DP shows the start time, duration and days
     # for start A. Not controllable - use automation instead.
+    # 9 raw bytes, big endian, observed as 00 06 00 00 0a ff 00 00 00
+    # for "06:00, 10 minutes, every day, enabled":
+    #   [0]    unidentified (candidate: irrigation/mist schedule type)
+    #   [1][2] start hour, start minute
+    #   [3][4] duration hours, duration minutes
+    #   [5]    bit0..bit6 = Sun..Sat, bit7 = schedule enabled
+    #   [6..8] unidentified, all zero so far
     category: diagnostic
     dps:
       - id: 110
         optional: true
         name: sensor
         type: base64
+        # ask for dp 110 explicitly on each poll rather than relying on the
+        # gateway to volunteer it. Collected per dp id, so this covers every
+        # masked attribute below.
+        force: true
       - id: 110
         optional: true
         # flags for days of the week Sun-Sat, plus a bit for on/off
@@ -167,6 +178,141 @@ entities:
         name: hours_start
         type: base64
         mask: "FF00000000000000"
+  - entity: sensor
+    # Human-readable decode of DP 110 (see "Start A encoded" for the byte
+    # map). State is eg "06:00 for 0:10, daily", or "Disabled" when the
+    # schedule is switched off. The individual fields are attributes.
+    name: Start A
+    icon: "mdi:calendar-clock"
+    category: diagnostic
+    dps:
+      - id: 110
+        optional: true
+        name: sensor
+        type: packedschedule
+        # render the start time in the device's own 12/24 hour setting
+        hour_format_dps: 114
+      - id: 110
+        optional: true
+        # byte 0. Mapping is unconfirmed - taken from the assumption that
+        # this byte selects the schedule type.
+        name: schedule_type
+        type: base64
+        mask: "FF0000000000000000"
+        mapping:
+          - dps_val: 0
+            value: irrigation
+          - dps_val: 1
+            value: mist
+      - id: 114
+        optional: true
+        name: time_format
+        type: string
+        mapping:
+          - dps_val: 12
+            value: 12_hour
+          - dps_val: 24
+            value: 24_hour
+      - id: 110
+        optional: true
+        name: start_hour
+        type: base64
+        mask: "FF00000000000000"
+      - id: 110
+        optional: true
+        name: start_minute
+        type: base64
+        mask: "FF000000000000"
+      - id: 110
+        optional: true
+        name: duration_hours
+        type: base64
+        mask: "FF0000000000"
+      - id: 110
+        optional: true
+        name: duration_minutes
+        type: base64
+        mask: "FF00000000"
+      - id: 110
+        optional: true
+        name: enabled
+        type: base64
+        mask: "80000000"
+        mapping:
+          - dps_val: 0
+            value: false
+          - dps_val: 1
+            value: true
+      - id: 110
+        optional: true
+        name: sunday
+        type: base64
+        mask: "01000000"
+        mapping:
+          - dps_val: 0
+            value: false
+          - dps_val: 1
+            value: true
+      - id: 110
+        optional: true
+        name: monday
+        type: base64
+        mask: "02000000"
+        mapping:
+          - dps_val: 0
+            value: false
+          - dps_val: 1
+            value: true
+      - id: 110
+        optional: true
+        name: tuesday
+        type: base64
+        mask: "04000000"
+        mapping:
+          - dps_val: 0
+            value: false
+          - dps_val: 1
+            value: true
+      - id: 110
+        optional: true
+        name: wednesday
+        type: base64
+        mask: "08000000"
+        mapping:
+          - dps_val: 0
+            value: false
+          - dps_val: 1
+            value: true
+      - id: 110
+        optional: true
+        name: thursday
+        type: base64
+        mask: "10000000"
+        mapping:
+          - dps_val: 0
+            value: false
+          - dps_val: 1
+            value: true
+      - id: 110
+        optional: true
+        name: friday
+        type: base64
+        mask: "20000000"
+        mapping:
+          - dps_val: 0
+            value: false
+          - dps_val: 1
+            value: true
+      - id: 110
+        optional: true
+        name: saturday
+        type: base64
+        mask: "40000000"
+        mapping:
+          - dps_val: 0
+            value: false
+          - dps_val: 1
+            value: true
   - entity: sensor
     name: Start B encoded
     category: diagnostic

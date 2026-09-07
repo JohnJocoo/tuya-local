@@ -120,7 +120,7 @@
                                 },
                                 "type": {
                                     "type": "string",
-                                    "enum": ["boolean", "integer", "string", "bitfield", "base64", "hex", "utf16b64", "json", "unixtime", "packeddate", "float"],
+                                    "enum": ["boolean", "integer", "string", "bitfield", "base64", "hex", "utf16b64", "json", "unixtime", "packeddate", "packedschedule", "float"],
                                     "description": "The type of the DP (e.g., boolean, integer, string)."
                                 },
                                 "name": {
@@ -217,6 +217,12 @@
                                     "type": "string",
                                     "pattern": "^[0-9a-fA-F]+$",
                                     "description": "A hexadecimal mask to extract an integer from a base64 or hex DP value."
+                                },
+                                "hour_format_dps": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 255,
+                                    "description": "For packedschedule DPs, the DP number holding the device's 12/24 hour display setting. When that DP reads 12, start times are rendered in 12 hour format. Default is 24 hour."
                                 },
                                 "mask_signed": {
                                     "type": "boolean",

@@ -1,5 +1,6 @@
 """Test the config parser"""
 
+from base64 import b64encode
 from datetime import datetime
 
 import pytest
@@ -95,6 +96,7 @@ DP_SCHEMA = vol.Schema(
                 "bitfield",
                 "unixtime",
                 "packeddate",
+                "packedschedule",
                 "json",
                 "utf16b64",
             ]
@@ -124,6 +126,7 @@ DP_SCHEMA = vol.Schema(
         vol.Optional("mapping"): [MAPPING_SCHEMA],
         vol.Optional("format"): [FORMAT_SCHEMA],
         vol.Optional("mask"): str,
+        vol.Optional("hour_format_dps"): int,
         vol.Optional("endianness"): vol.In(["little"]),
         vol.Optional("mask_signed"): True,
     }
@@ -750,6 +753,78 @@ def test_decoding_packeddate_invalid(mocker):
     assert cfg.get_value(mock_device) is None
     # Bogus month (13) -> ValueError caught internally
     mock_device.get_property.return_value = "Gg0BBgA="
+    assert cfg.get_value(mock_device) is None
+
+
+def test_decoding_packedschedule(mocker):
+    """Test that get_value decodes a base64 packed schedule to a summary."""
+    mock_entity = mocker.MagicMock()
+    mock_config = {"id": "1", "name": "sensor", "type": "packedschedule"}
+    mock_device = mocker.MagicMock()
+    # bytes [0, 6, 0, 0, 10, 0xff, 0, 0, 0] -> 06:00, 10 minutes, every day
+    mock_device.get_property.return_value = "AAYAAAr/AAAA"
+    cfg = TuyaDpsConfig(mock_entity, mock_config)
+    assert cfg.get_value(mock_device) == "06:00 for 0:10, daily"
+
+
+def test_decoding_packedschedule_selected_days(mocker):
+    """Test that individual day flags are named Sun..Sat, LSB first."""
+    mock_entity = mocker.MagicMock()
+    mock_config = {"id": "1", "name": "sensor", "type": "packedschedule"}
+    mock_device = mocker.MagicMock()
+    # 18:30, 1h05m, Mon + Wed + Fri (0x02 | 0x08 | 0x20 = 0x2a), enabled
+    raw = bytes([0, 18, 30, 1, 5, 0x80 | 0x2A, 0, 0, 0])
+    mock_device.get_property.return_value = b64encode(raw).decode()
+    cfg = TuyaDpsConfig(mock_entity, mock_config)
+    assert cfg.get_value(mock_device) == "18:30 for 1:05, Mon, Wed, Fri"
+
+
+def test_decoding_packedschedule_12_hour(mocker):
+    """Test that hour_format_dps switches the start time to 12 hour."""
+    mock_entity = mocker.MagicMock()
+    mock_config = {
+        "id": "1",
+        "name": "sensor",
+        "type": "packedschedule",
+        "hour_format_dps": 114,
+    }
+    mock_device = mocker.MagicMock()
+
+    def get_property(dp):
+        return "12" if dp == "114" else "AAYAAAr/AAAA"
+
+    mock_device.get_property.side_effect = get_property
+    cfg = TuyaDpsConfig(mock_entity, mock_config)
+    assert cfg.get_value(mock_device) == "6:00 AM for 0:10, daily"
+
+
+def test_decoding_packedschedule_disabled(mocker):
+    """Test that a schedule with the enable bit clear reports as disabled."""
+    mock_entity = mocker.MagicMock()
+    mock_config = {"id": "1", "name": "sensor", "type": "packedschedule"}
+    mock_device = mocker.MagicMock()
+    raw = bytes([0, 6, 0, 0, 10, 0x7F, 0, 0, 0])
+    mock_device.get_property.return_value = b64encode(raw).decode()
+    cfg = TuyaDpsConfig(mock_entity, mock_config)
+    assert cfg.get_value(mock_device) == "Disabled"
+
+
+def test_decoding_packedschedule_invalid(mocker):
+    """Test that empty or malformed schedules decode to None."""
+    mock_entity = mocker.MagicMock()
+    mock_config = {"id": "1", "name": "sensor", "type": "packedschedule"}
+    mock_device = mocker.MagicMock()
+    cfg = TuyaDpsConfig(mock_entity, mock_config)
+    # Too few bytes
+    mock_device.get_property.return_value = "AAA="
+    assert cfg.get_value(mock_device) is None
+    # All zero "no schedule" sentinel
+    mock_device.get_property.return_value = "AAAAAAAAAAAA"
+    assert cfg.get_value(mock_device) is None
+    # Bogus start hour (25)
+    mock_device.get_property.return_value = b64encode(
+        bytes([0, 25, 0, 0, 10, 0xFF, 0, 0, 0])
+    ).decode()
     assert cfg.get_value(mock_device) is None
 
 

@@ -19,6 +19,9 @@ import custom_components.tuya_local.devices as config_dir
 
 _LOGGER = logging.getLogger(__name__)
 
+# Bit order of the day flags in a packedschedule payload, LSB first.
+SCHEDULE_DAYS = ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+
 
 def _typematch(vtype, value):
     # Workaround annoying legacy of bool being a subclass of int in Python
@@ -421,6 +424,7 @@ class TuyaDpsConfig:
             "hex": str,
             "unixtime": int,
             "packeddate": str,
+            "packedschedule": str,
         }
         return types.get(t)
 
@@ -868,6 +872,10 @@ class TuyaDpsConfig:
             result = self._decode_packed_date(result)
             replaced = True
 
+        if self.rawtype == "packedschedule" and isinstance(result, str):
+            result = self._decode_packed_schedule(result, device)
+            replaced = True
+
         if replaced:
             _LOGGER.debug(
                 "%s: Mapped dps %s value from %s to %s",
@@ -906,6 +914,68 @@ class TuyaDpsConfig:
         except ValueError:
             _LOGGER.warning("Invalid packeddate components in '%s'", value)
             return None
+
+    def _hour_format(self, device):
+        """Return 12 or 24, from the dp named by hour_format_dps if set."""
+        dp = self._config.get("hour_format_dps")
+        if dp is None:
+            return 24
+        try:
+            return 12 if int(str(device.get_property(str(dp)))) == 12 else 24
+        except ValueError, TypeError:
+            return 24
+
+    def _decode_packed_schedule(self, value, device):
+        """Decode a base64 packed watering schedule to a readable summary.
+
+        Irrigation timers transmit each schedule slot as 9 raw bytes,
+        base64 encoded::
+
+            [0]    schedule type (0 = irrigation, 1 = mist)
+            [1][2] start hour, start minute
+            [3][4] duration hours, duration minutes
+            [5]    bit0..bit6 = Sun..Sat, bit7 = schedule enabled
+            [6..8] unused
+
+        eg ``"AAYAAAr/AAAA"`` -> ``"06:00 for 0:10, daily"``. When
+        ``hour_format_dps`` names a dp holding the device's 12/24 hour
+        setting and that dp reads 12, the start time is rendered as
+        ``"06:00 AM"`` instead. Returns None when there is no schedule
+        (all-zero sentinel) or the data is invalid.
+        """
+        try:
+            raw = b64decode(value)
+        except ValueError, TypeError:
+            _LOGGER.warning("Invalid base64 packedschedule '%s'", value)
+            return None
+        if len(raw) < 6:
+            return None
+        if not any(raw):
+            return None
+        start_h, start_m, dur_h, dur_m, days = raw[1], raw[2], raw[3], raw[4], raw[5]
+        if start_h > 23 or start_m > 59 or dur_m > 59:
+            _LOGGER.warning("Invalid packedschedule components in '%s'", value)
+            return None
+        if not days & 0x80:
+            return "Disabled"
+
+        if self._hour_format(device) == 12:
+            meridiem = "AM" if start_h < 12 else "PM"
+            hour12 = start_h % 12 or 12
+            start = f"{hour12}:{start_m:02d} {meridiem}"
+        else:
+            start = f"{start_h:02d}:{start_m:02d}"
+
+        weekdays = days & 0x7F
+        if weekdays == 0x7F:
+            when = "daily"
+        elif weekdays == 0:
+            when = "no days"
+        else:
+            when = ", ".join(
+                name for bit, name in enumerate(SCHEDULE_DAYS) if weekdays & (1 << bit)
+            )
+        return f"{start} for {dur_h}:{dur_m:02d}, {when}"
 
     def _find_map_for_value(self, value, device):
         default = None

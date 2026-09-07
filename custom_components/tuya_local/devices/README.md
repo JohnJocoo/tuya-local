@@ -160,6 +160,7 @@ The type of data returned by the Tuya API. Can be one of the following:
  - **json** is a special case of string, where multiple data points are encoded in json format in the string. Platforms that use this type will need special handling to make sense of the data.
  - **utf16b64** is a special case of string, where a UTF-16 string is base64 encoded. This will be decoded into a UTF-8 string so it is readable in Home Assistant.
  - **packeddate** is a special case of string, where the device packs a date and time into 5 base64 encoded bytes as `[year - 2000, month, day, hour, minute]` (local time). This is converted to a tz-aware datetime for Home Assistant, so it can be used directly by a `timestamp` sensor. An all-zero value is treated as "no value" (None).
+ - **packedschedule** is a special case of string, where an irrigation timer packs one schedule slot into 9 base64 encoded bytes as `[type, start hour, start minute, duration hours, duration minutes, day flags, ...]`. The day flags byte holds Sunday to Saturday in bits 0 to 6, and the schedule's on/off state in bit 7. This is decoded to a readable summary such as `06:00 for 0:10, daily`, or `Disabled` when bit 7 is clear. An all-zero value is treated as "no value" (None). The individual fields can be extracted alongside it as attributes using `mask` on `base64` dps of the same id.
  - **float** can contain floating point numbers. No known devices use this, but it is supported if needed.
 
 ### `name`
@@ -291,6 +292,14 @@ For sensors, this sets the state class of the sensor (`measurement`, `measuremen
 For base64 and hex types, this specifies how to decode the binary data (after hex or base64 decoding).
 This is a container field, the contents of which should be a list consisting of `name`, `bytes` and `range` fields. `range` is as described above. `bytes` is the number of bytes for the field, which can be `1`, `2`, or `4`. `name` is a name for the field, which will have special handling depending on
 the device type.
+
+### `hour_format_dps`
+
+*Optional, default None.*
+
+For `packedschedule` types, the dp number of the device's 12/24 hour
+display setting. When that dp reads 12, start times are rendered in 12
+hour format (`6:00 AM`); otherwise 24 hour format is used.
 
 ### `mask`
 
